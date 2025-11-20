@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { LayoutDashboard, Users, TrendingUp, Sliders, Activity, Menu, X } from 'lucide-react'
+import { DashboardAPI, Trade } from '@/lib/api'
 
+// Navigation Items (You can also move this to a separate component)
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/users', label: 'User Management', icon: Users },
@@ -14,140 +16,113 @@ const navItems = [
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  
+  // --- REAL DATA STATE ---
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    activeSubscribers: 0,
+    signalsToday: 0,
+    openTrades: 0,
+    botStatus: 'Online'
+  })
+  const [feed, setFeed] = useState<Trade[]>([])
+
+  // --- FETCH DATA ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const { users, trades } = await DashboardAPI.getData()
+        
+        const activeCount = users.filter(u => u.is_active).length
+        
+        const today = new Date().toISOString().split('T')[0]
+        const todaySignals = trades.filter(t => t.created_at.startsWith(today)).length
+        
+        const openCount = trades.filter(t => t.status === 'ACTIVE').length
+
+        setStats({
+          activeSubscribers: activeCount,
+          signalsToday: todaySignals,
+          openTrades: openCount,
+          botStatus: 'Online'
+        })
+
+        setFeed(trades.slice(0, 10))
+        
+      } catch (error) {
+        console.error("Failed to load dashboard data", error)
+        setStats(prev => ({ ...prev, botStatus: 'Offline' }))
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+    const interval = setInterval(fetchData, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <div
-        className={`fixed lg:static z-50 w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        } lg:translate-x-0`}
-      >
-        <div className="h-full flex flex-col overflow-y-auto">
-          {/* Logo */}
+      <div className={`fixed lg:static z-50 w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} lg:translate-x-0`}>
+        <div className="h-full flex flex-col">
           <div className="p-6 border-b border-sidebar-border">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-accent to-secondary rounded-lg flex items-center justify-center">
-                <span className="text-sidebar-primary-foreground font-bold">₿</span>
-              </div>
-              <span className="text-sidebar-foreground font-bold text-xl">CryptoBot</span>
-            </div>
+            <span className="text-sidebar-foreground font-bold text-xl">CryptoBot</span>
           </div>
-
-          {/* Nav Items */}
           <nav className="flex-1 px-4 py-6 space-y-2">
             {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
-              >
+              <Link key={item.href} href={item.href} className="flex items-center gap-3 px-4 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors">
                 <item.icon className="w-5 h-5" />
                 <span>{item.label}</span>
               </Link>
             ))}
           </nav>
-
-          {/* Footer */}
-          <div className="p-4 border-t border-sidebar-border">
-            <div className="px-4 py-3 bg-sidebar-accent bg-opacity-10 rounded-lg">
-              <p className="text-xs text-sidebar-foreground opacity-70">Status</p>
-              <p className="text-sm font-semibold text-green-400">🟢 Online</p>
-            </div>
-          </div>
         </div>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 hover:bg-muted rounded-lg"
-          >
-            {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden p-2 hover:bg-muted rounded-lg">
+            <Menu className="w-6 h-6" />
           </button>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-          <div className="w-10 h-10 bg-muted rounded-full" />
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-6 space-y-6">
-            {/* Key Metrics Cards */}
+        <div className="flex-1 overflow-auto p-6 space-y-6">
+            {/* Key Metrics */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <MetricCard
-                title="Total Active Subscribers"
-                value="142"
-                change="+12%"
-                status="up"
-              />
-              <MetricCard
-                title="Signals Today"
-                value="5"
-                change="1 pending"
-                status="neutral"
-              />
-              <MetricCard
-                title="Bot Status"
-                value="Online"
-                change="142h uptime"
-                status="up"
-              />
-              <MetricCard
-                title="Current Open Trades"
-                value="3"
-                change="$2,450 exposure"
-                status="neutral"
-              />
+              <MetricCard title="Total Active Subscribers" value={loading ? "..." : stats.activeSubscribers.toString()} change="Live" status="up" />
+              <MetricCard title="Signals Today" value={loading ? "..." : stats.signalsToday.toString()} change="Since 00:00 UTC" status="neutral" />
+              <MetricCard title="Bot Status" value={stats.botStatus} change="SystemD Service" status={stats.botStatus === 'Online' ? 'up' : 'down'} />
+              <MetricCard title="Current Open Trades" value={loading ? "..." : stats.openTrades.toString()} change="Active Positions" status="neutral" />
             </div>
 
-            {/* Charts Section */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-card border border-border rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Profit/Loss (30 Days)</h2>
-                <div className="h-48 bg-muted bg-opacity-20 rounded flex items-center justify-center text-muted-foreground">
-                  Chart Placeholder
-                </div>
-              </div>
-
-              <div className="bg-card border border-border rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Win/Loss Ratio</h2>
-                <div className="h-48 bg-muted bg-opacity-20 rounded flex items-center justify-center text-muted-foreground">
-                  Chart Placeholder
-                </div>
-              </div>
-            </div>
-
-            {/* Live Feed Widget */}
+            {/* Live Feed */}
             <div className="bg-card border border-border rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Live Feed</h2>
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                <FeedItem time="14:32:18" message="BTC/USDT signal generated - Confidence: 0.87" />
-                <FeedItem time="14:15:45" message="Position closed: ETH/USDT +245 USDT" />
-                <FeedItem time="14:02:30" message="User @trader_john subscribed" />
-                <FeedItem time="13:58:12" message="New signal: BNB/USDT entry @598.50" />
-                <FeedItem time="13:45:00" message="Risk check passed - opening position" />
+              <h2 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h2>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {loading ? <p>Loading...</p> : feed.map((trade) => (
+                    <FeedItem 
+                      key={trade.id}
+                      time={new Date(trade.created_at).toLocaleTimeString()}
+                      message={`${trade.signal_type} ${trade.pair} @ ${trade.entry_price}`}
+                      status={trade.status}
+                    />
+                ))}
               </div>
             </div>
-          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function MetricCard({ title, value, change, status }: {
-  title: string
-  value: string
-  change: string
-  status: 'up' | 'down' | 'neutral'
-}) {
-  const statusColor = status === 'up' ? 'text-green-400' : status === 'down' ? 'text-red-400' : 'text-accent'
-
+function MetricCard({ title, value, change, status }: any) {
+  const statusColor = status === 'up' ? 'text-green-400' : status === 'down' ? 'text-red-400' : 'text-gray-400'
   return (
-    <div className="bg-card border border-border rounded-lg p-6 hover:border-accent transition-colors">
+    <div className="bg-card border border-border rounded-lg p-6">
       <p className="text-sm text-muted-foreground mb-2">{title}</p>
       <p className="text-3xl font-bold text-foreground mb-2">{value}</p>
       <p className={`text-sm ${statusColor}`}>{change}</p>
@@ -155,11 +130,14 @@ function MetricCard({ title, value, change, status }: {
   )
 }
 
-function FeedItem({ time, message }: { time: string; message: string }) {
+function FeedItem({ time, message, status }: any) {
   return (
     <div className="flex gap-4 pb-3 border-b border-border last:border-0">
-      <span className="text-xs text-muted-foreground whitespace-nowrap">{time}</span>
-      <span className="text-sm text-foreground">{message}</span>
+      <span className="text-xs text-muted-foreground w-20">{time}</span>
+      <div className="flex-1 flex justify-between">
+        <span className="text-sm font-medium">{message}</span>
+        <span className="text-xs px-2 py-1 rounded bg-muted">{status}</span>
+      </div>
     </div>
   )
 }

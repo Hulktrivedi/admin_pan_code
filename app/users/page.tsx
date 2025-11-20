@@ -1,175 +1,141 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { Menu, Plus, Copy, Eye, EyeOff, Trash2 } from 'lucide-react'
+import { UserAPI, User } from '@/lib/api'
 import Link from 'next/link'
-import { LayoutDashboard, Users, TrendingUp, Sliders, Activity, Menu, X, Plus, Copy, Eye, EyeOff, Trash2 } from 'lucide-react'
-import Navigation from '@/components/navigation'
-
-const mockUsers = [
-  { id: 1, username: '@trader_alpha', telegramId: '123456789', expiry: '2025-02-15', joined: '2024-08-10', active: true },
-  { id: 2, username: '@crypto_investor', telegramId: '987654321', expiry: '2025-01-20', joined: '2024-07-22', active: true },
-  { id: 3, username: '@signal_seeker', telegramId: '456123789', expiry: '2024-12-30', joined: '2024-06-05', active: false },
-  { id: 4, username: '@bot_master', telegramId: '789456123', expiry: '2025-03-01', joined: '2024-09-14', active: true },
-  { id: 5, username: '@moon_walker', telegramId: '321654987', expiry: '2025-01-10', joined: '2024-08-28', active: true },
-]
 
 export default function UserManagement() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newUser, setNewUser] = useState({ username: '', telegramId: '', days: 30 })
   const [hiddenIds, setHiddenIds] = useState<number[]>([])
 
-  const filteredUsers = mockUsers.filter(
-    (user) =>
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.telegramId.includes(searchTerm)
-  )
+  useEffect(() => {
+    fetchUsers()
+  }, [])
 
-  const toggleTelegramVisibility = (id: number) => {
-    setHiddenIds((prev) =>
-      prev.includes(id) ? prev.filter((uid) => uid !== id) : [...prev, id]
-    )
+  const fetchUsers = async () => {
+    try {
+      const data = await UserAPI.getAll()
+      setUsers(data)
+    } catch (error) {
+      console.error("Failed to fetch users", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const copyToClipboard = (text: string, id: number) => {
-    navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
+  const handleAddUser = async () => {
+    if (!newUser.username || !newUser.telegramId) return
+    try {
+      await UserAPI.create({
+        username: newUser.username,
+        telegram_chat_id: parseInt(newUser.telegramId),
+        days_valid: newUser.days
+      })
+      setShowAddModal(false)
+      setNewUser({ username: '', telegramId: '', days: 30 })
+      fetchUsers()
+    } catch (error) {
+      alert("Failed to add user. ID might exist.")
+    }
+  }
+
+  const toggleStatus = async (id: number) => {
+    try {
+      await UserAPI.toggleStatus(id)
+      fetchUsers()
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const toggleVisibility = (id: number) => {
+    setHiddenIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   }
 
   return (
     <div className="flex h-screen bg-background">
-      <Navigation sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+       {/* Sidebar Placeholder */}
+      <div className="w-64 bg-sidebar border-r border-sidebar-border hidden lg:block">
+        <div className="p-6 border-b border-sidebar-border font-bold text-xl">CryptoBot</div>
+        <nav className="p-4 space-y-2">
+           <Link href="/" className="block px-4 py-2 rounded hover:bg-muted">Dashboard</Link>
+           <Link href="/users" className="block px-4 py-2 rounded bg-accent text-white">User Management</Link>
+           <Link href="/trades" className="block px-4 py-2 rounded hover:bg-muted">Signals & Trades</Link>
+        </nav>
+      </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="bg-card border-b border-border px-6 py-4 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 hover:bg-muted rounded-lg"
-          >
-            {sidebarOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-5 h-5" />
-            Add User
+        <div className="bg-card border-b border-border px-6 py-4 flex justify-between items-center">
+          <h1 className="text-2xl font-bold">User Management</h1>
+          <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 bg-accent text-accent-foreground px-4 py-2 rounded-lg">
+            <Plus className="w-5 h-5" /> Add User
           </button>
         </div>
 
-        {/* Content Area */}
-        <div className="flex-1 overflow-auto">
-          <div className="p-6 space-y-6">
-            {/* Search Bar */}
-            <div>
-              <input
-                type="text"
-                placeholder="Search by username or Telegram ID..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full px-4 py-2 bg-card border border-border rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-            </div>
-
-            {/* Users Table */}
-            <div className="bg-card border border-border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-muted bg-opacity-20 border-b border-border">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Status</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Username</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Telegram ID</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Expiry Date</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Joined</th>
-                      <th className="px-6 py-3 text-left text-sm font-semibold text-foreground">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.map((user) => (
-                      <tr key={user.id} className="border-b border-border hover:bg-muted hover:bg-opacity-20 transition-colors">
-                        <td className="px-6 py-4">
-                          <span className={`inline-block w-2 h-2 rounded-full ${user.active ? 'bg-green-400' : 'bg-red-400'}`} />
-                        </td>
-                        <td className="px-6 py-4 text-foreground font-medium">{user.username}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <span className="text-foreground font-mono text-sm">
-                              {hiddenIds.includes(user.id)
-                                ? '••••••••••'
-                                : user.telegramId}
-                            </span>
-                            <button
-                              onClick={() => toggleTelegramVisibility(user.id)}
-                              className="p-1 hover:bg-muted rounded transition-colors"
-                            >
-                              {hiddenIds.includes(user.id) ? (
-                                <Eye className="w-4 h-4 text-muted-foreground" />
-                              ) : (
-                                <EyeOff className="w-4 h-4 text-muted-foreground" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => copyToClipboard(user.telegramId, user.id)}
-                              className="p-1 hover:bg-muted rounded transition-colors"
-                            >
-                              <Copy className={`w-4 h-4 ${copiedId === user.id ? 'text-green-400' : 'text-muted-foreground'}`} />
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-foreground">{user.expiry}</td>
-                        <td className="px-6 py-4 text-foreground text-sm text-muted-foreground">{user.joined}</td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2">
-                            <button className="px-3 py-1 bg-accent text-accent-foreground rounded text-sm hover:opacity-90 transition-opacity">
-                              +30d
-                            </button>
-                            <button className="p-1 hover:bg-destructive hover:bg-opacity-20 rounded transition-colors">
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+        <div className="flex-1 overflow-auto p-6">
+          <div className="bg-card border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-6 py-3">Status</th>
+                  <th className="px-6 py-3">Username</th>
+                  <th className="px-6 py-3">Telegram ID</th>
+                  <th className="px-6 py-3">Expiry</th>
+                  <th className="px-6 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {loading ? <tr><td colSpan={5} className="p-6 text-center">Loading...</td></tr> : 
+                 users.map((user) => (
+                  <tr key={user.id} className="hover:bg-muted/20">
+                    <td className="px-6 py-4 cursor-pointer" onClick={() => toggleStatus(user.id)}>
+                      <span className={`inline-block w-3 h-3 rounded-full ${user.is_active ? 'bg-green-400' : 'bg-red-400'}`} />
+                    </td>
+                    <td className="px-6 py-4 font-medium">{user.username}</td>
+                    <td className="px-6 py-4 flex items-center gap-2">
+                      <span className="font-mono">{hiddenIds.includes(user.id) ? '••••••' : user.telegram_chat_id}</span>
+                      <button onClick={() => toggleVisibility(user.id)} className="p-1 hover:bg-muted rounded">
+                        {hiddenIds.includes(user.id) ? <Eye className="w-4 h-4"/> : <EyeOff className="w-4 h-4"/>}
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">{user.subscription_end || 'Lifetime'}</td>
+                    <td className="px-6 py-4">
+                      <button className="p-1 text-red-500 hover:bg-red-500/10 rounded"><Trash2 className="w-4 h-4" /></button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
 
-      {/* Add User Modal */}
+      {/* Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-96 shadow-xl">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Add New User</h2>
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Telegram ID"
-                className="w-full px-4 py-2 bg-background border border-border rounded text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              <input
-                type="date"
-                className="w-full px-4 py-2 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 bg-muted text-foreground rounded hover:opacity-80 transition-opacity"
-                >
-                  Cancel
-                </button>
-                <button className="flex-1 px-4 py-2 bg-accent text-accent-foreground rounded hover:opacity-90 transition-opacity">
-                  Add User
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-lg w-96 space-y-4 border border-border">
+            <h2 className="text-xl font-bold">Add New User</h2>
+            <input 
+              placeholder="Username" 
+              className="w-full p-2 border rounded bg-background"
+              value={newUser.username}
+              onChange={e => setNewUser({...newUser, username: e.target.value})}
+            />
+            <input 
+              placeholder="Telegram Chat ID" 
+              type="number"
+              className="w-full p-2 border rounded bg-background"
+              value={newUser.telegramId}
+              onChange={e => setNewUser({...newUser, telegramId: e.target.value})}
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded hover:bg-muted">Cancel</button>
+              <button onClick={handleAddUser} className="px-4 py-2 bg-accent text-white rounded">Add</button>
             </div>
           </div>
         </div>
